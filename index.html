@@ -1,4 +1,17 @@
-<!DOCTYPE html>
+.header h1 {
+font-size: 2rem;
+color: #ff6b6b;
+text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+margin-bottom: 5px;
+}
+
+```
+    .header .subtitle {
+        font-size: 1rem;
+        color: #ffd93d;
+        opacity: 0.8;
+    }<!DOCTYPE html>
+```
 
 <html lang="en">
 <head>
@@ -19,36 +32,22 @@
         background: linear-gradient(135deg, #1a1a2e, #16213e);
         color: white;
         min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
         padding: 10px;
-    }
-    
-    .header {
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    
-    .header h1 {
-        font-size: 2.5rem;
-        color: #ff6b6b;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        margin-bottom: 10px;
-    }
-    
-    .header .subtitle {
-        font-size: 1.2rem;
-        color: #ffd93d;
-        opacity: 0.8;
+        overflow-y: auto;
     }
     
     .game-container {
+        max-width: 800px;
+        margin: 0 auto;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 20px;
-        max-width: 100%;
+    }
+    
+    .header {
+        text-align: center;
+        margin-bottom: 10px;
     }
     
     .game-info {
@@ -158,16 +157,31 @@
     
     @media (max-width: 768px) {
         .header h1 {
-            font-size: 2rem;
+            font-size: 1.8rem;
+        }
+        
+        .header .subtitle {
+            font-size: 0.9rem;
         }
         
         .game-info {
             flex-direction: column;
             gap: 10px;
+            padding: 10px;
         }
         
         .player-info {
-            min-width: 200px;
+            min-width: 180px;
+            padding: 8px 15px;
+        }
+        
+        .controls {
+            gap: 8px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            font-size: 0.9rem;
         }
     }
     
@@ -204,13 +218,13 @@
 
 </head>
 <body>
-    <div class="header">
-        <h1>WALL GO</h1>
-        <div class="subtitle">The Devil's Plan - Territory Control Strategy Game</div>
-    </div>
+    <div class="game-container">
+        <div class="header">
+            <h1>WALL GO</h1>
+            <div class="subtitle">The Devil's Plan - Territory Control Strategy Game</div>
+        </div>
 
 ```
-<div class="game-container">
     <div class="game-info">
         <div id="player1Info" class="player-info active">
             <h3 style="color: #ff6b6b;">Player 1 (Red)</h3>
