@@ -527,8 +527,7 @@
             let chosenSpot;
             
             if (gameState.gameMode === 'ai-easy') {
-                chosenSpot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
-            } else if (gameState.gameMode === 'ai-medium') {
+                // Easy AI (formerly Medium): Prefer center positions
                 let centerSpots = availableSpots.filter(spot => 
                     spot.row >= 2 && spot.row <= 4 && spot.col >= 2 && spot.col <= 4);
                 if (centerSpots.length > 0) {
@@ -536,8 +535,12 @@
                 } else {
                     chosenSpot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
                 }
+            } else if (gameState.gameMode === 'ai-medium') {
+                // Medium AI (formerly Hard): Strategic placement
+                chosenSpot = getBestSetupMoveMedium(availableSpots);
             } else { // Hard AI
-                chosenSpot = getBestSetupMove(availableSpots);
+                // New Hard AI: Advanced strategic placement
+                chosenSpot = getBestSetupMoveHard(availableSpots, currentPlayerNum);
             }
             
             setTimeout(() => {
@@ -609,8 +612,8 @@
             }, 1200);
         }
         
-        function getBestSetupMove(availableSpots) {
-            // Hard AI setup strategy: prefer central positions with good expansion potential
+        function getBestSetupMoveMedium(availableSpots) {
+            // Medium AI setup strategy (formerly Hard)
             let scoredSpots = availableSpots.map(spot => {
                 let score = 0;
                 
@@ -641,6 +644,90 @@
             return topChoices[Math.floor(Math.random() * topChoices.length)].spot;
         }
         
+        function getBestSetupMoveHard(availableSpots, currentPlayerNum) {
+            // New Hard AI: Advanced strategic placement
+            let opponentPlayer = currentPlayerNum === 1 ? 2 : 1;
+            let myPieces = players[currentPlayerNum].pieces;
+            let opponentPieces = players[opponentPlayer].pieces;
+            
+            let scoredSpots = availableSpots.map(spot => {
+                let score = 0;
+                
+                // 1. Central control (less weighted than before)
+                let centerDistance = Math.abs(spot.row - 3) + Math.abs(spot.col - 3);
+                score += (6 - centerDistance) * 5;
+                
+                // 2. Distance optimization to own pieces (cluster strategy)
+                if (myPieces.length > 0) {
+                    let minDistToOwn = Math.min(...myPieces.map(p => 
+                        Math.abs(p.row - spot.row) + Math.abs(p.col - spot.col)));
+                    // Prefer spots that are 2-3 squares away from own pieces
+                    if (minDistToOwn === 2 || minDistToOwn === 3) {
+                        score += 20;
+                    } else if (minDistToOwn === 1) {
+                        score += 10;
+                    } else if (minDistToOwn > 4) {
+                        score -= 10;
+                    }
+                }
+                
+                // 3. Blocking opponent's territory formation
+                if (opponentPieces.length > 0) {
+                    let minDistToOpponent = Math.min(...opponentPieces.map(p => 
+                        Math.abs(p.row - spot.row) + Math.abs(p.col - spot.col)));
+                    // Prefer spots that interfere with opponent's territory
+                    if (minDistToOpponent === 2 || minDistToOpponent === 3) {
+                        score += 15;
+                    }
+                }
+                
+                // 4. Edge strategy - avoid edges unless strategic
+                if (spot.row === 0 || spot.row === BOARD_SIZE - 1 || 
+                    spot.col === 0 || spot.col === BOARD_SIZE - 1) {
+                    score -= 15;
+                    // Unless it's a corner which can be strategic
+                    if ((spot.row === 0 || spot.row === BOARD_SIZE - 1) && 
+                        (spot.col === 0 || spot.col === BOARD_SIZE - 1)) {
+                        score += 10; // Corners can be defendable
+                    }
+                }
+                
+                // 5. Future territory potential
+                let territoryPotential = evaluateTerritoryPotential(spot, currentPlayerNum);
+                score += territoryPotential * 8;
+                
+                return {spot, score};
+            });
+            
+            scoredSpots.sort((a, b) => b.score - a.score);
+            
+            // Less randomness for hard AI
+            let topChoices = scoredSpots.slice(0, Math.min(2, scoredSpots.length));
+            return topChoices[0].spot; // Usually pick the best, occasionally the second best
+        }
+        
+        function evaluateTerritoryPotential(spot, playerNum) {
+            // Evaluate how good a spot is for creating territories
+            let potential = 0;
+            
+            // Check each quadrant around the spot
+            let quadrants = [
+                {minR: 0, maxR: spot.row, minC: 0, maxC: spot.col}, // Top-left
+                {minR: 0, maxR: spot.row, minC: spot.col, maxC: BOARD_SIZE}, // Top-right
+                {minR: spot.row, maxR: BOARD_SIZE, minC: 0, maxC: spot.col}, // Bottom-left
+                {minR: spot.row, maxR: BOARD_SIZE, minC: spot.col, maxC: BOARD_SIZE} // Bottom-right
+            ];
+            
+            for (let quad of quadrants) {
+                let size = (quad.maxR - quad.minR) * (quad.maxC - quad.minC);
+                if (size >= 4 && size <= 12) { // Optimal territory size
+                    potential += size;
+                }
+            }
+            
+            return potential;
+        }
+        
         function getBestAIMove() {
             let playerPieces = players[gameState.currentPlayer].pieces;
             let allPossibleMoves = [];
@@ -649,7 +736,7 @@
             for (let piece of playerPieces) {
                 let validMoves = getValidMoves(piece.row, piece.col);
                 for (let move of validMoves) {
-                    let validWalls = getValidWallPlacements(move.row, move.col); // Walls must be adjacent to final position
+                    let validWalls = getValidWallPlacements(move.row, move.col);
                     for (let wall of validWalls) {
                         allPossibleMoves.push({
                             fromPiece: piece,
@@ -670,33 +757,36 @@
             // Score moves based on difficulty level
             for (let move of allPossibleMoves) {
                 if (gameState.gameMode === 'ai-easy') {
-                    move.score = Math.random(); // Random moves
+                    // Easy AI (formerly Medium): Basic scoring
+                    move.score = scoreMoveEasy(move);
                 } else if (gameState.gameMode === 'ai-medium') {
-                    move.score = scoreMoveBasic(move);
+                    // Medium AI (formerly Hard): Advanced scoring
+                    move.score = scoreMoveMedium(move);
                 } else { // Hard AI
-                    move.score = scoreMoveAdvanced(move);
+                    // New Hard AI: Expert scoring with lookahead
+                    move.score = scoreMoveHard(move);
                 }
             }
             
-            // Sort and pick best move (with some randomness for easy/medium)
+            // Sort and pick best move
             allPossibleMoves.sort((a, b) => b.score - a.score);
             
             if (gameState.gameMode === 'ai-easy') {
-                // Easy AI: Pick from top 50% of moves
-                let cutoff = Math.floor(allPossibleMoves.length * 0.5);
-                return allPossibleMoves[Math.floor(Math.random() * Math.max(1, cutoff))];
-            } else if (gameState.gameMode === 'ai-medium') {
-                // Medium AI: Pick from top 25% of moves
+                // Easy AI: Pick from top 25% of moves
                 let cutoff = Math.floor(allPossibleMoves.length * 0.25);
                 return allPossibleMoves[Math.floor(Math.random() * Math.max(1, cutoff))];
-            } else {
-                // Hard AI: Pick best move with slight randomness
+            } else if (gameState.gameMode === 'ai-medium') {
+                // Medium AI: Pick from top 3 moves
                 let topMoves = allPossibleMoves.slice(0, Math.min(3, allPossibleMoves.length));
                 return topMoves[Math.floor(Math.random() * topMoves.length)];
+            } else {
+                // Hard AI: Always pick the best move
+                return allPossibleMoves[0];
             }
         }
         
-        function scoreMoveBasic(move) {
+        function scoreMoveEasy(move) {
+            // Easy AI (formerly Medium): Basic scoring
             let score = 0;
             
             // Simulate the move
@@ -741,10 +831,9 @@
             return score;
         }
         
-        function scoreMoveAdvanced(move) {
-            let score = scoreMoveBasic(move);
-            
-            // Advanced considerations for hard AI
+        function scoreMoveMedium(move) {
+            // Medium AI (formerly Hard): Advanced scoring
+            let score = scoreMoveEasy(move);
             
             // Simulate the move
             let originalBoard = JSON.parse(JSON.stringify(board));
@@ -767,7 +856,7 @@
             let territories = calculateTerritories();
             let myTerritories = territories.filter(t => t.player === gameState.currentPlayer);
             let largestTerritory = Math.max(0, ...myTerritories.map(t => t.size));
-            score += largestTerritory * 5; // Prefer larger consolidated territories
+            score += largestTerritory * 5;
             
             // 2. Opponent blocking
             let opponentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
@@ -775,12 +864,11 @@
             for (let piece of players[opponentPlayer].pieces) {
                 opponentMobility += getValidMoves(piece.row, piece.col).length;
             }
-            score += (10 - opponentMobility) * 3; // Bonus for reducing opponent mobility
+            score += (10 - opponentMobility) * 3;
             
-            // 3. Wall efficiency - prefer walls that create multiple barriers
+            // 3. Wall efficiency
             let wallEfficiency = 0;
             if (move.wall.type === 'horizontal') {
-                // Check how many opponent movements this wall blocks
                 for (let piece of players[opponentPlayer].pieces) {
                     if ((piece.row === move.wall.row - 1 || piece.row === move.wall.row) && 
                         piece.col === move.wall.col) {
@@ -797,7 +885,7 @@
             }
             score += wallEfficiency;
             
-            // 4. Endgame consideration - if few walls left, be more aggressive
+            // 4. Endgame consideration
             if (players[gameState.currentPlayer].wallsLeft < 5) {
                 score += (myTerritories.reduce((sum, t) => sum + t.size, 0)) * 10;
             }
@@ -808,6 +896,312 @@
             verticalWalls = originalVWalls;
             
             return score;
+        }
+        
+        function scoreMoveHard(move) {
+            // New Hard AI: Expert scoring with advanced strategies
+            let baseScore = scoreMoveMedium(move);
+            
+            // Save current state
+            let originalBoard = JSON.parse(JSON.stringify(board));
+            let originalHWalls = JSON.parse(JSON.stringify(horizontalWalls));
+            let originalVWalls = JSON.parse(JSON.stringify(verticalWalls));
+            let originalPieces = JSON.parse(JSON.stringify(players));
+            
+            // Apply the move
+            board[move.fromPiece.row][move.fromPiece.col] = 0;
+            board[move.toRow][move.toCol] = gameState.currentPlayer;
+            
+            // Update piece position in players data
+            let pieceIndex = players[gameState.currentPlayer].pieces.findIndex(p => 
+                p.row === move.fromPiece.row && p.col === move.fromPiece.col);
+            if (pieceIndex !== -1) {
+                players[gameState.currentPlayer].pieces[pieceIndex] = {row: move.toRow, col: move.toCol};
+            }
+            
+            if (move.wall.type === 'horizontal') {
+                horizontalWalls[move.wall.row][move.wall.col] = gameState.currentPlayer;
+            } else {
+                verticalWalls[move.wall.row][move.wall.col] = gameState.currentPlayer;
+            }
+            
+            // Advanced scoring factors
+            let advancedScore = 0;
+            
+            // 1. Territory completion analysis
+            let territories = calculateTerritories();
+            let myCompleteTerritories = territories.filter(t => 
+                t.player === gameState.currentPlayer && isTerritoryClosed(t));
+            advancedScore += myCompleteTerritories.reduce((sum, t) => sum + t.size, 0) * 15;
+            
+            // 2. Future move quality
+            let futureQuality = evaluateFutureMoveQuality();
+            advancedScore += futureQuality * 8;
+            
+            // 3. Opponent disruption
+            let opponentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            let opponentTerritoryPotential = evaluateOpponentTerritoryPotential(opponentPlayer);
+            advancedScore -= opponentTerritoryPotential * 10;
+            
+            // 4. Wall chain bonus - walls that connect to existing walls
+            let wallChainBonus = evaluateWallChain(move.wall);
+            advancedScore += wallChainBonus * 12;
+            
+            // 5. Endgame strategy
+            let totalWallsUsed = countTotalWallsUsed();
+            if (totalWallsUsed > 30) { // Late game
+                // Focus on securing existing territories
+                advancedScore += myCompleteTerritories.length * 25;
+                
+                // Punish moves that don't contribute to territory
+                if (!contributesToTerritory(move)) {
+                    advancedScore -= 20;
+                }
+            }
+            
+            // 6. Positional advantage
+            let positionalScore = evaluatePositionalAdvantage(move.toRow, move.toCol);
+            advancedScore += positionalScore * 6;
+            
+            // 7. Simulate opponent's best response (1-ply lookahead)
+            let opponentBestResponse = simulateOpponentResponse();
+            advancedScore -= opponentBestResponse * 0.5;
+            
+            // Restore state
+            board = originalBoard;
+            horizontalWalls = originalHWalls;
+            verticalWalls = originalVWalls;
+            players = originalPieces;
+            
+            return baseScore + advancedScore;
+        }
+        
+        function isTerritoryClosed(territory) {
+            // Check if a territory is completely enclosed by walls
+            for (let cell of territory.cells) {
+                // Check all four sides
+                let sides = [
+                    {dr: -1, dc: 0, wallType: 'horizontal', wallRow: cell.row, wallCol: cell.col},
+                    {dr: 1, dc: 0, wallType: 'horizontal', wallRow: cell.row + 1, wallCol: cell.col},
+                    {dr: 0, dc: -1, wallType: 'vertical', wallRow: cell.row, wallCol: cell.col},
+                    {dr: 0, dc: 1, wallType: 'vertical', wallRow: cell.row, wallCol: cell.col + 1}
+                ];
+                
+                for (let side of sides) {
+                    let adjacentRow = cell.row + side.dr;
+                    let adjacentCol = cell.col + side.dc;
+                    
+                    // If adjacent cell is outside board or not in territory, check for wall
+                    if (adjacentRow < 0 || adjacentRow >= BOARD_SIZE || 
+                        adjacentCol < 0 || adjacentCol >= BOARD_SIZE ||
+                        !territory.cells.some(c => c.row === adjacentRow && c.col === adjacentCol)) {
+                        
+                        let hasWall = false;
+                        if (side.wallType === 'horizontal' && side.wallRow >= 0 && side.wallRow <= BOARD_SIZE) {
+                            hasWall = horizontalWalls[side.wallRow][side.wallCol] > 0;
+                        } else if (side.wallType === 'vertical' && side.wallCol >= 0 && side.wallCol <= BOARD_SIZE) {
+                            hasWall = verticalWalls[side.wallRow][side.wallCol] > 0;
+                        }
+                        
+                        if (!hasWall && adjacentRow >= 0 && adjacentRow < BOARD_SIZE && 
+                            adjacentCol >= 0 && adjacentCol < BOARD_SIZE) {
+                            return false; // Territory is open
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        
+        function evaluateFutureMoveQuality() {
+            // Evaluate the quality of future moves available
+            let totalQuality = 0;
+            let moveCount = 0;
+            
+            for (let piece of players[gameState.currentPlayer].pieces) {
+                let moves = getValidMoves(piece.row, piece.col);
+                totalQuality += moves.length;
+                moveCount++;
+                
+                // Bonus for pieces that can reach multiple quadrants
+                let reachableQuadrants = new Set();
+                for (let move of moves) {
+                    let quadrant = Math.floor(move.row / 4) * 2 + Math.floor(move.col / 4);
+                    reachableQuadrants.add(quadrant);
+                }
+                totalQuality += reachableQuadrants.size * 3;
+            }
+            
+            return moveCount > 0 ? totalQuality / moveCount : 0;
+        }
+        
+        function evaluateOpponentTerritoryPotential(opponentPlayer) {
+            // Evaluate opponent's potential to form territories
+            let potential = 0;
+            let territories = calculateTerritories();
+            
+            for (let territory of territories) {
+                if (territory.player === 0) { // Unclaimed territory
+                    // Check how close opponent pieces are to this territory
+                    let minDist = Infinity;
+                    for (let piece of players[opponentPlayer].pieces) {
+                        for (let cell of territory.cells) {
+                            let dist = Math.abs(piece.row - cell.row) + Math.abs(piece.col - cell.col);
+                            minDist = Math.min(minDist, dist);
+                        }
+                    }
+                    
+                    if (minDist <= 2) {
+                        potential += territory.size / (minDist + 1);
+                    }
+                }
+            }
+            
+            return potential;
+        }
+        
+        function evaluateWallChain(wall) {
+            // Bonus for walls that connect to existing walls
+            let connections = 0;
+            
+            if (wall.type === 'horizontal') {
+                // Check left connection
+                if (wall.col > 0 && horizontalWalls[wall.row][wall.col - 1] === gameState.currentPlayer) {
+                    connections++;
+                }
+                // Check right connection
+                if (wall.col < BOARD_SIZE - 1 && horizontalWalls[wall.row][wall.col + 1] === gameState.currentPlayer) {
+                    connections++;
+                }
+                // Check perpendicular connections
+                if (wall.row > 0 && verticalWalls[wall.row - 1][wall.col] === gameState.currentPlayer) {
+                    connections++;
+                }
+                if (wall.row > 0 && verticalWalls[wall.row - 1][wall.col + 1] === gameState.currentPlayer) {
+                    connections++;
+                }
+                if (wall.row < BOARD_SIZE && verticalWalls[wall.row][wall.col] === gameState.currentPlayer) {
+                    connections++;
+                }
+                if (wall.row < BOARD_SIZE && verticalWalls[wall.row][wall.col + 1] === gameState.currentPlayer) {
+                    connections++;
+                }
+            } else { // vertical wall
+                // Check top connection
+                if (wall.row > 0 && verticalWalls[wall.row - 1][wall.col] === gameState.currentPlayer) {
+                    connections++;
+                }
+                // Check bottom connection
+                if (wall.row < BOARD_SIZE - 1 && verticalWalls[wall.row + 1][wall.col] === gameState.currentPlayer) {
+                    connections++;
+                }
+                // Check perpendicular connections
+                if (wall.col > 0 && horizontalWalls[wall.row][wall.col - 1] === gameState.currentPlayer) {
+                    connections++;
+                }
+                if (wall.col > 0 && horizontalWalls[wall.row + 1][wall.col - 1] === gameState.currentPlayer) {
+                    connections++;
+                }
+                if (wall.col < BOARD_SIZE && horizontalWalls[wall.row][wall.col] === gameState.currentPlayer) {
+                    connections++;
+                }
+                if (wall.col < BOARD_SIZE && horizontalWalls[wall.row + 1][wall.col] === gameState.currentPlayer) {
+                    connections++;
+                }
+            }
+            
+            return connections;
+        }
+        
+        function countTotalWallsUsed() {
+            let count = 0;
+            for (let row = 0; row <= BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (horizontalWalls[row][col] > 0) count++;
+                }
+            }
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col <= BOARD_SIZE; col++) {
+                    if (verticalWalls[row][col] > 0) count++;
+                }
+            }
+            return count;
+        }
+        
+        function contributesToTerritory(move) {
+            // Check if a move contributes to forming or securing a territory
+            let territories = calculateTerritories();
+            
+            for (let territory of territories) {
+                if (territory.player === gameState.currentPlayer || territory.player === 0) {
+                    // Check if the new position or wall is adjacent to this territory
+                    for (let cell of territory.cells) {
+                        if (Math.abs(cell.row - move.toRow) + Math.abs(cell.col - move.toCol) <= 1) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+        
+        function evaluatePositionalAdvantage(row, col) {
+            // Evaluate the strategic value of a position
+            let score = 0;
+            
+            // Control of key positions
+            if ((row === 2 || row === 4) && (col === 2 || col === 4)) {
+                score += 3; // Key junction points
+            }
+            
+            // Flexibility - number of different directions available
+            let directions = 0;
+            if (row > 1) directions++;
+            if (row < BOARD_SIZE - 2) directions++;
+            if (col > 1) directions++;
+            if (col < BOARD_SIZE - 2) directions++;
+            score += directions * 2;
+            
+            return score;
+        }
+        
+        function simulateOpponentResponse() {
+            // Simple 1-ply lookahead to evaluate opponent's best response
+            let opponentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            let bestOpponentScore = 0;
+            
+            // Temporarily switch perspective
+            let tempCurrentPlayer = gameState.currentPlayer;
+            gameState.currentPlayer = opponentPlayer;
+            
+            // Evaluate top 3 opponent moves
+            let opponentMoves = [];
+            for (let piece of players[opponentPlayer].pieces) {
+                let validMoves = getValidMoves(piece.row, piece.col);
+                for (let move of validMoves) {
+                    let validWalls = getValidWallPlacements(move.row, move.col);
+                    for (let wall of validWalls) {
+                        opponentMoves.push({
+                            fromPiece: piece,
+                            toRow: move.row,
+                            toCol: move.col,
+                            wall: wall,
+                            score: scoreMoveEasy({fromPiece: piece, toRow: move.row, toCol: move.col, wall: wall})
+                        });
+                    }
+                }
+            }
+            
+            opponentMoves.sort((a, b) => b.score - a.score);
+            if (opponentMoves.length > 0) {
+                bestOpponentScore = opponentMoves[0].score;
+            }
+            
+            // Restore current player
+            gameState.currentPlayer = tempCurrentPlayer;
+            
+            return bestOpponentScore;
         }
         
         function handleGameClick(row, col) {
