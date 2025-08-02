@@ -513,6 +513,7 @@
         <button id="aiEasyBtn" class="btn btn-secondary">vs AI (Easy)</button>
         <button id="aiMediumBtn" class="btn btn-secondary">vs AI (Medium)</button>
         <button id="aiHardBtn" class="btn btn-secondary">vs AI (Hard)</button>
+        <button id="forceResetBtn" class="btn" style="background: #ff9800; color: white; font-size: 0.8rem;">Force Reset</button>
     </div>
 </div>
 
@@ -528,7 +529,6 @@
         validMoves: [],
         placingWall: false,
         validWallPlacements: [],
-        lastMovedPiecePos: null, // Track where the piece moved to for wall placement
         gameHistory: [],
         gameMode: 'pvp', // 'pvp', 'ai-easy', 'ai-medium', 'ai-hard'
         aiThinking: false
@@ -807,7 +807,6 @@
             placeWall(bestWall);
             gameState.placingWall = false;
             gameState.validWallPlacements = [];
-            gameState.lastMovedPiecePos = null; // Reset the tracking
             
             // Switch to next player
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
@@ -1237,7 +1236,6 @@
             validMoves: [],
             placingWall: false,
             validWallPlacements: [],
-            lastMovedPiecePos: null,
             gameHistory: [],
             gameMode: mode,
             aiThinking: false
@@ -1246,7 +1244,7 @@
         updateUI();
         
         // If first player is AI (shouldn't happen in current setup, but just in case)
-        if (players[gameState.setupOrder[gameState.setupIndex]].isAI) {
+        if (players[1].isAI) {
             setTimeout(makeAISetupMove, 500);
         }
     }
@@ -1257,6 +1255,16 @@
     document.getElementById('aiEasyBtn').addEventListener('click', () => resetGame('ai-easy'));
     document.getElementById('aiMediumBtn').addEventListener('click', () => resetGame('ai-medium'));
     document.getElementById('aiHardBtn').addEventListener('click', () => resetGame('ai-hard'));
+    document.getElementById('forceResetBtn').addEventListener('click', () => {
+        // Force reset to clear any stuck states
+        gameState.aiThinking = false;
+        gameState.placingWall = false;
+        gameState.selectedPiece = null;
+        gameState.validMoves = [];
+        gameState.validWallPlacements = [];
+        console.log('Force reset - cleared all stuck states');
+        resetGame('pvp');
+    });
     
     // Window resize handler
     function windowResized() {
