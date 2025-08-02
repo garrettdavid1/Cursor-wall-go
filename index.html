@@ -14,280 +14,6 @@
         }
 
 ```
-    // ==================== AI FUNCTIONS ====================
-    
-    function makeAISetupMove() {
-        if (gameState.phase !== 'setup' || !players[gameState.currentPlayer].isAI) return;
-        
-        gameState.aiThinking = true;
-        updateUI();
-        
-        let availableSpots = [];
-        for (let row = 0; row < BOARD_SIZE; row++) {
-            for (let col = 0; col < BOARD_SIZE; col++) {
-                if (board[row][col] === 0) {
-                    availableSpots.push({row, col});
-                }
-            }
-        }
-        
-        let chosenSpot;
-        
-        if (gameState.gameMode === 'ai-easy') {
-            // Easy AI: Random placement
-            chosenSpot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
-        } else if (gameState.gameMode === 'ai-medium') {
-            // Medium AI: Prefer center and avoid edges
-            let centerSpots = availableSpots.filter(spot => 
-                spot.row >= 2 && spot.row <= 4 && spot.col >= 2 && spot.col <= 4);
-            if (centerSpots.length > 0) {
-                chosenSpot = centerSpots[Math.floor(Math.random() * centerSpots.length)];
-            } else {
-                chosenSpot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
-            }
-        } else { // Hard AI
-            // Hard AI: Strategic placement considering control and future mobility
-            chosenSpot = getBestSetupMove(availableSpots);
-        }
-        
-        setTimeout(() => {
-            handleSetupClick(chosenSpot.row, chosenSpot.col);
-            gameState.aiThinking = false;
-        }, 1000);
-    }
-    
-    function makeAIMove() {
-        if (gameState.phase !== 'playing' || !players[gameState.currentPlayer].isAI) return;
-        
-        gameState.aiThinking = true;
-        updateUI();
-        
-        let bestMove = getBestAIMove();
-        
-        setTimeout(() => {
-            if (bestMove) {
-                // Move the piece
-                movePiece(bestMove.fromPiece, bestMove.toRow, bestMove.toCol);
-                
-                // Place the wall
-                placeWall(bestMove.wall);
-                players[gameState.currentPlayer].wallsLeft--;
-                
-                // Switch players
-                gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
-                
-                if (isGameOver()) {
-                    endGame();
-                } else {
-                    updateUI();
-                    // If next player is also AI, continue
-                    if (players[gameState.currentPlayer].isAI) {
-                        setTimeout(makeAIMove, 800);
-                    }
-                }
-            }
-            gameState.aiThinking = false;
-        }, 1200);
-    }
-    
-    function getBestSetupMove(availableSpots) {
-        // Hard AI setup strategy: prefer central positions with good expansion potential
-        let scoredSpots = availableSpots.map(spot => {
-            let score = 0;
-            
-            // Prefer center positions
-            let centerDistance = Math.abs(spot.row - 3) + Math.abs(spot.col - 3);
-            score += (6 - centerDistance) * 10;
-            
-            // Consider future mobility
-            let mobilityScore = 0;
-            for (let dr = -2; dr <= 2; dr++) {
-                for (let dc = -2; dc <= 2; dc++) {
-                    let newRow = spot.row + dr;
-                    let newCol = spot.col + dc;
-                    if (newRow >= 0 && newRow < BOARD_SIZE && newCol >= 0 && newCol < BOARD_SIZE) {
-                        mobilityScore++;
-                    }
-                }
-            }
-            score += mobilityScore;
-            
-            return {spot, score};
-        });
-        
-        scoredSpots.sort((a, b) => b.score - a.score);
-        
-        // Add some randomness to top choices
-        let topChoices = scoredSpots.slice(0, Math.min(3, scoredSpots.length));
-        return topChoices[Math.floor(Math.random() * topChoices.length)].spot;
-    }
-    
-    function getBestAIMove() {
-        let playerPieces = players[gameState.currentPlayer].pieces;
-        let allPossibleMoves = [];
-        
-        // Generate all possible moves for all pieces
-        for (let piece of playerPieces) {
-            let validMoves = getValidMoves(piece.row, piece.col);
-            for (let move of validMoves) {
-                let validWalls = getValidWallPlacements(move.row, move.col); // Walls must be adjacent to final position
-                for (let wall of validWalls) {
-                    allPossibleMoves.push({
-                        fromPiece: piece,
-                        toRow: move.row,
-                        toCol: move.col,
-                        wall: wall,
-                        score: 0
-                    });
-                }
-            }
-        }
-        
-        if (allPossibleMoves.length === 0) return null;
-        
-        // Score moves based on difficulty level
-        for (let move of allPossibleMoves) {
-            if (gameState.gameMode === 'ai-easy') {
-                move.score = Math.random(); // Random moves
-            } else if (gameState.gameMode === 'ai-medium') {
-                move.score = scoreMoveBasic(move);
-            } else { // Hard AI
-                move.score = scoreMoveAdvanced(move);
-            }
-        }
-        
-        // Sort and pick best move (with some randomness for easy/medium)
-        allPossibleMoves.sort((a, b) => b.score - a.score);
-        
-        if (gameState.gameMode === 'ai-easy') {
-            // Easy AI: Pick from top 50% of moves
-            let cutoff = Math.floor(allPossibleMoves.length * 0.5);
-            return allPossibleMoves[Math.floor(Math.random() * Math.max(1, cutoff))];
-        } else if (gameState.gameMode === 'ai-medium') {
-            // Medium AI: Pick from top 25% of moves
-            let cutoff = Math.floor(allPossibleMoves.length * 0.25);
-            return allPossibleMoves[Math.floor(Math.random() * Math.max(1, cutoff))];
-        } else {
-            // Hard AI: Pick best move with slight randomness
-            let topMoves = allPossibleMoves.slice(0, Math.min(3, allPossibleMoves.length));
-            return topMoves[Math.floor(Math.random() * topMoves.length)];
-        }
-    }
-    
-    function scoreMoveBasic(move) {
-        let score = 0;
-        
-        // Simulate the move
-        let originalBoard = JSON.parse(JSON.stringify(board));
-        let originalHWalls = JSON.parse(JSON.stringify(horizontalWalls));
-        let originalVWalls = JSON.parse(JSON.stringify(verticalWalls));
-        
-        // Apply move
-        board[move.fromPiece.row][move.fromPiece.col] = 0;
-        board[move.toRow][move.toCol] = gameState.currentPlayer;
-        
-        if (move.wall.type === 'horizontal') {
-            horizontalWalls[move.wall.row][move.wall.col] = gameState.currentPlayer;
-        } else {
-            verticalWalls[move.wall.row][move.wall.col] = gameState.currentPlayer;
-        }
-        
-        // Basic scoring: prefer moves that increase territory potential
-        let territories = calculateTerritories();
-        let myTerritorySize = 0;
-        let opponentTerritorySize = 0;
-        
-        for (let territory of territories) {
-            if (territory.player === gameState.currentPlayer) {
-                myTerritorySize += territory.size;
-            } else if (territory.player > 0) {
-                opponentTerritorySize += territory.size;
-            }
-        }
-        
-        score = myTerritorySize - opponentTerritorySize;
-        
-        // Bonus for mobility
-        let mobility = getValidMoves(move.toRow, move.toCol).length;
-        score += mobility * 2;
-        
-        // Restore board
-        board = originalBoard;
-        horizontalWalls = originalHWalls;
-        verticalWalls = originalVWalls;
-        
-        return score;
-    }
-    
-    function scoreMoveAdvanced(move) {
-        let score = scoreMoveBasic(move);
-        
-        // Advanced considerations for hard AI
-        
-        // Simulate the move
-        let originalBoard = JSON.parse(JSON.stringify(board));
-        let originalHWalls = JSON.parse(JSON.stringify(horizontalWalls));
-        let originalVWalls = JSON.parse(JSON.stringify(verticalWalls));
-        
-        // Apply move
-        board[move.fromPiece.row][move.fromPiece.col] = 0;
-        board[move.toRow][move.toCol] = gameState.currentPlayer;
-        
-        if (move.wall.type === 'horizontal') {
-            horizontalWalls[move.wall.row][move.wall.col] = gameState.currentPlayer;
-        } else {
-            verticalWalls[move.wall.row][move.wall.col] = gameState.currentPlayer;
-        }
-        
-        // Strategic considerations
-        
-        // 1. Territory control efficiency
-        let territories = calculateTerritories();
-        let myTerritories = territories.filter(t => t.player === gameState.currentPlayer);
-        let largestTerritory = Math.max(0, ...myTerritories.map(t => t.size));
-        score += largestTerritory * 5; // Prefer larger consolidated territories
-        
-        // 2. Opponent blocking
-        let opponentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
-        let opponentMobility = 0;
-        for (let piece of players[opponentPlayer].pieces) {
-            opponentMobility += getValidMoves(piece.row, piece.col).length;
-        }
-        score += (10 - opponentMobility) * 3; // Bonus for reducing opponent mobility
-        
-        // 3. Wall efficiency - prefer walls that create multiple barriers
-        let wallEfficiency = 0;
-        if (move.wall.type === 'horizontal') {
-            // Check how many opponent movements this wall blocks
-            for (let piece of players[opponentPlayer].pieces) {
-                if ((piece.row === move.wall.row - 1 || piece.row === move.wall.row) && 
-                    piece.col === move.wall.col) {
-                    wallEfficiency += 5;
-                }
-            }
-        } else {
-            for (let piece of players[opponentPlayer].pieces) {
-                if ((piece.col === move.wall.col - 1 || piece.col === move.wall.col) && 
-                    piece.row === move.wall.row) {
-                    wallEfficiency += 5;
-                }
-            }
-        }
-        score += wallEfficiency;
-        
-        // 4. Endgame consideration - if few walls left, be more aggressive
-        if (players[gameState.currentPlayer].wallsLeft < 5) {
-            score += (myTerritories.reduce((sum, t) => sum + t.size, 0)) * 10;
-        }
-        
-        // Restore board
-        board = originalBoard;
-        horizontalWalls = originalHWalls;
-        verticalWalls = originalVWalls;
-        
-        return score;
-    }
-    
     body {
         font-family: 'Arial', sans-serif;
         background: linear-gradient(135deg, #1a1a2e, #16213e);
@@ -488,12 +214,12 @@
     <div class="game-info">
         <div id="player1Info" class="player-info active">
             <h3 style="color: #ff6b6b;">Player 1 (Red)</h3>
-            <div class="pieces-count">Pieces: 2</div>
+            <div class="pieces-count">Pieces: 0</div>
             <div class="walls-count">Walls: 20</div>
         </div>
         <div id="player2Info" class="player-info">
             <h3 style="color: #4ecdc4;">Player 2 (Blue)</h3>
-            <div class="pieces-count">Pieces: 2</div>
+            <div class="pieces-count">Pieces: 0</div>
             <div class="walls-count">Walls: 20</div>
         </div>
     </div>
@@ -505,7 +231,6 @@
         <div id="instructions" class="instructions">
             Player 1: Click on any empty square to place your first piece
         </div>
-        <div id="debugInfo" style="font-size: 0.7rem; margin-top: 10px; opacity: 0.6; font-family: monospace;"></div>
     </div>
     
     <div class="controls">
@@ -514,43 +239,22 @@
         <button id="aiEasyBtn" class="btn btn-secondary">vs AI (Easy)</button>
         <button id="aiMediumBtn" class="btn btn-secondary">vs AI (Medium)</button>
         <button id="aiHardBtn" class="btn btn-secondary">vs AI (Hard)</button>
-        <button id="forceResetBtn" class="btn" style="background: #ff9800; color: white; font-size: 0.8rem;">Force Reset</button>
     </div>
 </div>
 
-<!-- Debug Log Box -->
-<div style="position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.95); color: #00ff00; font-family: monospace; font-size: 0.8rem; max-height: 150px; overflow-y: auto; padding: 8px; border-top: 2px solid #333; z-index: 1000;">
-    <div style="font-weight: bold; color: #ffd93d; margin-bottom: 3px; font-size: 0.9rem;">Debug Log:</div>
-    <div id="debugLog" style="white-space: pre-wrap; line-height: 1.2;"></div>
-    <button id="clearLogBtn" style="position: absolute; top: 3px; right: 5px; background: #ff6b6b; color: white; border: none; padding: 4px 8px; border-radius: 3px; font-size: 0.7rem; touch-action: manipulation;">Clear</button>
-</div>
-
 <script>
-    // Check if P5.js loaded
-    if (typeof createCanvas === 'undefined') {
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('debugLog').textContent = 'ERROR: P5.js failed to load! Canvas cannot be created.';
-        });
-    } else {
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('debugLog').textContent = 'P5.js loaded successfully, waiting for setup()...';
-        });
-    }
-    
     // Game state
     let gameState = {
-        phase: 'setup', // 'setup', 'playing', 'gameOver'
+        phase: 'setup',
         currentPlayer: 1,
-        setupRound: 1,
-        setupOrder: [1, 2, 2, 1], // Placement order for 2 pieces each
+        setupOrder: [1, 2, 2, 1],
         setupIndex: 0,
         selectedPiece: null,
         validMoves: [],
         placingWall: false,
         validWallPlacements: [],
-        lastMovedPiecePos: null, // Track where the piece moved to for wall placement
-        gameHistory: [],
-        gameMode: 'pvp', // 'pvp', 'ai-easy', 'ai-medium', 'ai-hard'
+        lastMovedPiecePos: null,
+        gameMode: 'pvp',
         aiThinking: false
     };
     
@@ -574,7 +278,6 @@
     let boardOffsetX, boardOffsetY;
     
     function setup() {
-        // Calculate canvas size based on screen
         let canvasSize = Math.min(600, window.innerWidth - 40, window.innerHeight - 300);
         canvas = createCanvas(canvasSize, canvasSize);
         canvas.parent('gameCanvas');
@@ -593,31 +296,23 @@
         stroke(100);
         strokeWeight(1);
         for (let i = 0; i <= BOARD_SIZE; i++) {
-            // Vertical lines
             line(boardOffsetX + i * cellSize, boardOffsetY, 
                  boardOffsetX + i * cellSize, boardOffsetY + BOARD_SIZE * cellSize);
-            // Horizontal lines
             line(boardOffsetX, boardOffsetY + i * cellSize, 
                  boardOffsetX + BOARD_SIZE * cellSize, boardOffsetY + i * cellSize);
         }
         
-        // Draw walls
         drawWalls();
-        
-        // Draw pieces
         drawPieces();
         
-        // Draw valid moves if piece is selected
         if (gameState.selectedPiece && gameState.validMoves.length > 0) {
             drawValidMoves();
         }
         
-        // Draw valid wall placements if in wall placement mode
         if (gameState.placingWall && gameState.validWallPlacements.length > 0) {
             drawValidWallPlacements();
         }
         
-        // Draw territories if game is over
         if (gameState.phase === 'gameOver') {
             drawTerritories();
         }
@@ -626,7 +321,6 @@
     function drawWalls() {
         strokeWeight(6);
         
-        // Draw horizontal walls
         for (let row = 0; row <= BOARD_SIZE; row++) {
             for (let col = 0; col < BOARD_SIZE; col++) {
                 if (horizontalWalls[row][col] > 0) {
@@ -638,7 +332,6 @@
             }
         }
         
-        // Draw vertical walls
         for (let row = 0; row < BOARD_SIZE; row++) {
             for (let col = 0; col <= BOARD_SIZE; col++) {
                 if (verticalWalls[row][col] > 0) {
@@ -664,7 +357,6 @@
                 if (gameState.selectedPiece && 
                     gameState.selectedPiece.row === piece.row && 
                     gameState.selectedPiece.col === piece.col) {
-                    // Highlight selected piece
                     fill(255, 255, 255);
                     ellipse(x, y, cellSize * 0.8);
                     fill(players[player].color[0], players[player].color[1], players[player].color[2]);
@@ -721,123 +413,117 @@
     }
     
     function mousePressed() {
-        debugLog(`mousePressed: ${mouseX}, ${mouseY}`);
-        handleInput(mouseX, mouseY);
-    }
-    
-    function touchStarted() {
-        debugLog(`touchStarted: ${touches.length} touches`);
-        if (touches.length > 0) {
-            debugLog(`touch position: ${touches[0].x}, ${touches[0].y}`);
-            handleInput(touches[0].x, touches[0].y);
-            return false; // Prevent default behavior
-        }
-    }
-    
-    function handleInput(x, y) {
-        debugLog(`handleInput: ${x}, ${y}`);
-        
-        // Don't allow input during AI thinking
-        if (gameState.aiThinking) {
-            debugLog('Input blocked - AI is thinking');
-            return;
-        }
-        
-        let gridCol = Math.floor((x - boardOffsetX) / cellSize);
-        let gridRow = Math.floor((y - boardOffsetY) / cellSize);
-        
-        debugLog(`Grid position: ${gridRow}, ${gridCol}`);
+        let gridCol = Math.floor((mouseX - boardOffsetX) / cellSize);
+        let gridRow = Math.floor((mouseY - boardOffsetY) / cellSize);
         
         if (gridCol < 0 || gridCol >= BOARD_SIZE || gridRow < 0 || gridRow >= BOARD_SIZE) {
-            debugLog('Click outside grid bounds');
             return;
         }
-        
-        // Only allow human player input
-        if (players[gameState.currentPlayer] && players[gameState.currentPlayer].isAI) {
-            debugLog('Current player is AI, ignoring human input');
-            return;
-        }
-        
-        debugLog(`Game phase: ${gameState.phase}, Current player: ${gameState.currentPlayer}`);
         
         if (gameState.phase === 'setup') {
-            debugLog('Calling handleSetupClick');
             handleSetupClick(gridRow, gridCol);
         } else if (gameState.phase === 'playing') {
             if (gameState.placingWall) {
-                debugLog('Calling handleWallPlacement');
-                handleWallPlacement(x, y);
+                handleWallPlacement(mouseX, mouseY);
             } else {
-                debugLog('Calling handleGameClick');
                 handleGameClick(gridRow, gridCol);
             }
         }
     }
     
+    function touchStarted() {
+        if (touches.length > 0) {
+            let gridCol = Math.floor((touches[0].x - boardOffsetX) / cellSize);
+            let gridRow = Math.floor((touches[0].y - boardOffsetY) / cellSize);
+            
+            if (gridCol >= 0 && gridCol < BOARD_SIZE && gridRow >= 0 && gridRow < BOARD_SIZE) {
+                if (gameState.phase === 'setup') {
+                    handleSetupClick(gridRow, gridCol);
+                } else if (gameState.phase === 'playing') {
+                    if (gameState.placingWall) {
+                        handleWallPlacement(touches[0].x, touches[0].y);
+                    } else {
+                        handleGameClick(gridRow, gridCol);
+                    }
+                }
+            }
+            return false;
+        }
+    }
+    
     function handleSetupClick(row, col) {
-        debugLog(`handleSetupClick called: ${row}, ${col}`);
-        debugLog(`Board at position: ${board[row][col]}`);
-        debugLog(`Current setup index: ${gameState.setupIndex}`);
-        debugLog(`Current player from order: ${gameState.setupOrder[gameState.setupIndex]}`);
-        
         if (board[row][col] === 0) {
             let currentPlayerNum = gameState.setupOrder[gameState.setupIndex];
             board[row][col] = currentPlayerNum;
             players[currentPlayerNum].pieces.push({row: row, col: col});
             
-            debugLog(`Placed piece for player ${currentPlayerNum} at ${row}, ${col}`);
-            
             gameState.setupIndex++;
-            debugLog(`Advanced setup index to: ${gameState.setupIndex}`);
             
             if (gameState.setupIndex >= gameState.setupOrder.length) {
-                debugLog('Setup complete, transitioning to playing phase');
                 gameState.phase = 'playing';
                 gameState.currentPlayer = 1;
                 updateUI();
-                // If it's AI's turn, make AI move
-                if (players[gameState.currentPlayer].isAI && !gameState.aiThinking) {
-                    debugLog('Player 1 is AI, triggering AI move');
-                    setTimeout(makeAIMove, 500);
-                }
             } else {
                 gameState.currentPlayer = gameState.setupOrder[gameState.setupIndex];
-                let nextPlayer = gameState.currentPlayer;
-                debugLog(`Next player: ${nextPlayer}, isAI: ${players[nextPlayer].isAI}`);
                 updateUI();
-                // If it's AI's turn in setup, make AI placement
-                if (players[nextPlayer].isAI && !gameState.aiThinking) {
-                    debugLog(`Player ${nextPlayer} is AI, triggering AI setup move`);
+                if (players[gameState.currentPlayer].isAI) {
                     setTimeout(makeAISetupMove, 500);
-                } else {
-                    debugLog(`Player ${nextPlayer} is human, waiting for input`);
                 }
             }
+        }
+    }
+    
+    function makeAISetupMove() {
+        if (gameState.phase !== 'setup' || !players[gameState.currentPlayer].isAI) return;
+        
+        let availableSpots = [];
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            for (let col = 0; col < BOARD_SIZE; col++) {
+                if (board[row][col] === 0) {
+                    availableSpots.push({row, col});
+                }
+            }
+        }
+        
+        if (availableSpots.length === 0) return;
+        
+        let chosenSpot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
+        
+        let currentPlayerNum = gameState.setupOrder[gameState.setupIndex];
+        board[chosenSpot.row][chosenSpot.col] = currentPlayerNum;
+        players[currentPlayerNum].pieces.push({row: chosenSpot.row, col: chosenSpot.col});
+        
+        gameState.setupIndex++;
+        
+        if (gameState.setupIndex >= gameState.setupOrder.length) {
+            gameState.phase = 'playing';
+            gameState.currentPlayer = 1;
+            updateUI();
         } else {
-            debugLog(`Position ${row}, ${col} is already occupied by player ${board[row][col]}`);
+            gameState.currentPlayer = gameState.setupOrder[gameState.setupIndex];
+            updateUI();
+            if (players[gameState.currentPlayer].isAI) {
+                setTimeout(makeAISetupMove, 500);
+            }
         }
     }
     
     function handleGameClick(row, col) {
         if (gameState.selectedPiece) {
-            // Check if clicked position is a valid move
             let validMove = gameState.validMoves.find(move => move.row === row && move.col === col);
             if (validMove) {
                 movePiece(gameState.selectedPiece, row, col);
                 gameState.selectedPiece = null;
                 gameState.validMoves = [];
                 
-                // Now player must place a wall adjacent to where the piece moved
                 gameState.placingWall = true;
-                gameState.lastMovedPiecePos = {row: row, col: col}; // Store the final position
+                gameState.lastMovedPiecePos = {row: row, col: col};
                 gameState.validWallPlacements = getValidWallPlacements(row, col);
                 updateUI();
                 return;
             }
         }
         
-        // Check if clicked on own piece
         if (board[row][col] === gameState.currentPlayer) {
             gameState.selectedPiece = {row: row, col: col};
             gameState.validMoves = getValidMoves(row, col);
@@ -874,32 +560,22 @@
             placeWall(bestWall);
             gameState.placingWall = false;
             gameState.validWallPlacements = [];
-            gameState.lastMovedPiecePos = null; // Reset the tracking
+            gameState.lastMovedPiecePos = null;
             
-            // Switch to next player
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
             
-            // Check for game end
             if (isGameOver()) {
                 endGame();
             } else {
                 updateUI();
-                // If it's AI's turn, make AI move
-                if (players[gameState.currentPlayer].isAI && !gameState.aiThinking) {
-                    setTimeout(makeAIMove, 800);
-                }
             }
         }
     }
     
     function movePiece(piece, newRow, newCol) {
-        // Remove from old position
         board[piece.row][piece.col] = 0;
-        
-        // Add to new position
         board[newRow][newCol] = gameState.currentPlayer;
         
-        // Update piece in player data
         let playerPiece = players[gameState.currentPlayer].pieces.find(p => 
             p.row === piece.row && p.col === piece.col);
         if (playerPiece) {
@@ -920,9 +596,8 @@
     
     function getValidMoves(row, col) {
         let moves = [];
-        let directions = [[-1,0], [1,0], [0,-1], [0,1]]; // up, down, left, right
+        let directions = [[-1,0], [1,0], [0,-1], [0,1]];
         
-        // 0 moves (stay in place) - only if player can move forward and back
         let canStayInPlace = false;
         for (let [dr, dc] of directions) {
             let newRow = row + dr;
@@ -938,7 +613,6 @@
             moves.push({row: row, col: col});
         }
         
-        // 1 move
         for (let [dr, dc] of directions) {
             let newRow = row + dr;
             let newCol = col + dc;
@@ -947,7 +621,6 @@
             }
         }
         
-        // 2 moves (including L-shaped)
         for (let [dr1, dc1] of directions) {
             let midRow = row + dr1;
             let midCol = col + dc1;
@@ -956,7 +629,6 @@
                     let finalRow = midRow + dr2;
                     let finalCol = midCol + dc2;
                     if (canMoveTo(midRow, midCol, finalRow, finalCol)) {
-                        // Don't add if it's the same as a 1-move option
                         if (!moves.some(m => m.row === finalRow && m.col === finalCol)) {
                             moves.push({row: finalRow, col: finalCol});
                         }
@@ -969,31 +641,24 @@
     }
     
     function canMoveTo(fromRow, fromCol, toRow, toCol) {
-        // Check bounds
         if (toRow < 0 || toRow >= BOARD_SIZE || toCol < 0 || toCol >= BOARD_SIZE) {
             return false;
         }
         
-        // Check if destination is occupied
         if (board[toRow][toCol] !== 0) {
             return false;
         }
         
-        // Check for walls blocking the path
         if (fromRow === toRow) {
-            // Moving horizontally
             let minCol = Math.min(fromCol, toCol);
             let maxCol = Math.max(fromCol, toCol);
             if (maxCol === minCol + 1) {
-                // Adjacent cells, check vertical wall between them
                 return verticalWalls[fromRow][maxCol] === 0;
             }
         } else if (fromCol === toCol) {
-            // Moving vertically
             let minRow = Math.min(fromRow, toRow);
             let maxRow = Math.max(fromRow, toRow);
             if (maxRow === minRow + 1) {
-                // Adjacent cells, check horizontal wall between them
                 return horizontalWalls[maxRow][fromCol] === 0;
             }
         }
@@ -1004,9 +669,7 @@
     function getValidWallPlacements(pieceRow = null, pieceCol = null) {
         let placements = [];
         
-        // If no piece position specified, allow walls anywhere (for AI calculations)
         if (pieceRow === null || pieceCol === null) {
-            // Horizontal walls
             for (let row = 0; row <= BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     if (horizontalWalls[row][col] === 0) {
@@ -1015,7 +678,6 @@
                 }
             }
             
-            // Vertical walls
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col <= BOARD_SIZE; col++) {
                     if (verticalWalls[row][col] === 0) {
@@ -1027,24 +689,16 @@
             return placements;
         }
         
-        // Wall must be adjacent to the piece that just moved
-        
-        // Horizontal walls (above and below the piece)
-        // Wall above the piece
         if (pieceRow > 0 && horizontalWalls[pieceRow][pieceCol] === 0) {
             placements.push({type: 'horizontal', row: pieceRow, col: pieceCol});
         }
-        // Wall below the piece
         if (pieceRow < BOARD_SIZE - 1 && horizontalWalls[pieceRow + 1][pieceCol] === 0) {
             placements.push({type: 'horizontal', row: pieceRow + 1, col: pieceCol});
         }
         
-        // Vertical walls (left and right of the piece)
-        // Wall to the left of the piece
         if (pieceCol > 0 && verticalWalls[pieceRow][pieceCol] === 0) {
             placements.push({type: 'vertical', row: pieceRow, col: pieceCol});
         }
-        // Wall to the right of the piece
         if (pieceCol < BOARD_SIZE - 1 && verticalWalls[pieceRow][pieceCol + 1] === 0) {
             placements.push({type: 'vertical', row: pieceRow, col: pieceCol + 1});
         }
@@ -1053,7 +707,6 @@
     }
     
     function isGameOver() {
-        // Simple game over check: when all players have used all walls
         return players[1].wallsLeft === 0 && players[2].wallsLeft === 0;
     }
     
@@ -1090,24 +743,21 @@
             visited[row][col] = true;
             cells.push({row, col});
             
-            // Track which players have pieces in this territory
             if (board[row][col] > 0) {
                 playersInTerritory.add(board[row][col]);
             }
             
-            // Check all 4 directions, but only move if no wall blocks the path
             let directions = [
-                {dr: -1, dc: 0, wallType: 'horizontal', wallRow: row, wallCol: col}, // up
-                {dr: 1, dc: 0, wallType: 'horizontal', wallRow: row + 1, wallCol: col}, // down
-                {dr: 0, dc: -1, wallType: 'vertical', wallRow: row, wallCol: col}, // left
-                {dr: 0, dc: 1, wallType: 'vertical', wallRow: row, wallCol: col + 1} // right
+                {dr: -1, dc: 0, wallType: 'horizontal', wallRow: row, wallCol: col},
+                {dr: 1, dc: 0, wallType: 'horizontal', wallRow: row + 1, wallCol: col},
+                {dr: 0, dc: -1, wallType: 'vertical', wallRow: row, wallCol: col},
+                {dr: 0, dc: 1, wallType: 'vertical', wallRow: row, wallCol: col + 1}
             ];
             
             for (let {dr, dc, wallType, wallRow, wallCol} of directions) {
                 let newRow = row + dr;
                 let newCol = col + dc;
                 
-                // Check if there's a wall blocking this direction
                 let wallBlocked = false;
                 if (wallType === 'horizontal' && wallRow >= 0 && wallRow <= BOARD_SIZE && wallCol >= 0 && wallCol < BOARD_SIZE) {
                     wallBlocked = horizontalWalls[wallRow][wallCol] > 0;
@@ -1121,7 +771,6 @@
             }
         }
         
-        // A territory belongs to a player only if it contains pieces from exactly one player
         let owner = playersInTerritory.size === 1 ? Array.from(playersInTerritory)[0] : 0;
         
         return {
@@ -1149,20 +798,7 @@
     }
     
     function showGameOver(winner, scores) {
-        let territories = calculateTerritories();
-        console.log('Territories found:', territories); // Debug info
-        
         let statusDiv = document.querySelector('.status');
-        
-        // Create detailed territory breakdown for debugging
-        let territoryDetails = '';
-        territories.forEach((territory, index) => {
-            console.log(`Territory ${index + 1}: Player ${territory.player}, Size ${territory.size}, Cells:`, territory.cells);
-            if (territory.player > 0) {
-                territoryDetails += `<div style="font-size: 0.8rem; margin: 2px 0;">Territory ${index + 1}: Player ${territory.player} - ${territory.size} squares</div>`;
-            }
-        });
-        
         statusDiv.innerHTML = `
             <div class="game-over">
                 <h2>Game Over!</h2>
@@ -1174,18 +810,11 @@
                     <div class="score-item">Player 1 (Red): ${scores[1]} territory</div>
                     <div class="score-item">Player 2 (Blue): ${scores[2]} territory</div>
                 </div>
-                <div style="margin-top: 10px; font-size: 0.9rem; opacity: 0.8;">
-                    <strong>Territory Breakdown:</strong>
-                    ${territoryDetails || '<div>No controlled territories found</div>'}
-                </div>
             </div>
         `;
     }
     
     function updateUI() {
-        debugLog(`updateUI called - Phase: ${gameState.phase}, CurrentPlayer: ${gameState.currentPlayer}, SetupIndex: ${gameState.setupIndex}`);
-        
-        // Update player info
         for (let player in players) {
             let infoDiv = document.getElementById(`player${player}Info`);
             let piecesDiv = infoDiv.querySelector('.pieces-count');
@@ -1193,9 +822,7 @@
             
             piecesDiv.textContent = `Pieces: ${players[player].pieces.length}`;
             
-            // Calculate walls remaining
             let wallsUsed = 0;
-            // Count horizontal walls
             for (let row = 0; row <= BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     if (horizontalWalls[row][col] == player) {
@@ -1203,7 +830,6 @@
                     }
                 }
             }
-            // Count vertical walls
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col <= BOARD_SIZE; col++) {
                     if (verticalWalls[row][col] == player) {
@@ -1214,8 +840,6 @@
             
             let wallsRemaining = 20 - wallsUsed;
             wallsDiv.textContent = `Walls: ${wallsRemaining}`;
-            
-            // Update the player object to keep it in sync
             players[player].wallsLeft = wallsRemaining;
             
             if (gameState.currentPlayer == player && gameState.phase !== 'gameOver') {
@@ -1225,7 +849,6 @@
             }
         }
         
-        // Update phase info
         let phaseInfo = document.getElementById('phaseInfo');
         let instructions = document.getElementById('instructions');
         
@@ -1256,19 +879,13 @@
             phaseInfo.textContent = 'Game Over';
             instructions.textContent = 'Click "New Game" to play again';
         }
-        
-        debugLog(`UI updated - Instructions: "${instructions.textContent}"`);
     }
     
     function resetGame(mode = 'pvp') {
-        debugLog(`resetGame called with mode: ${mode}`);
-        
-        // Reset board
         board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
         horizontalWalls = Array(BOARD_SIZE + 1).fill().map(() => Array(BOARD_SIZE).fill(0));
         verticalWalls = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE + 1).fill(0));
         
-        // Reset players
         players[1].pieces = [];
         players[1].wallsLeft = 20;
         players[1].name = 'Player 1 (Red)';
@@ -1278,7 +895,6 @@
         players[2].wallsLeft = 20;
         players[2].isAI = false;
         
-        // Set up game mode
         gameState.gameMode = mode;
         if (mode !== 'pvp') {
             players[2].isAI = true;
@@ -1289,17 +905,13 @@
             } else if (mode === 'ai-hard') {
                 players[2].name = 'AI (Hard)';
             }
-            debugLog(`Set player 2 as AI: ${players[2].name}`);
         } else {
             players[2].name = 'Player 2 (Blue)';
-            debugLog('Set as PVP mode');
         }
         
-        // Reset game state
         gameState = {
             phase: 'setup',
             currentPlayer: 1,
-            setupRound: 1,
             setupOrder: [1, 2, 2, 1],
             setupIndex: 0,
             selectedPiece: null,
@@ -1307,68 +919,20 @@
             placingWall: false,
             validWallPlacements: [],
             lastMovedPiecePos: null,
-            gameHistory: [],
             gameMode: mode,
             aiThinking: false
         };
         
-        debugLog(`Game reset complete. Setup order: [${gameState.setupOrder.join(', ')}]`);
-        debugLog(`Current player: ${gameState.currentPlayer}, Setup index: ${gameState.setupIndex}`);
-        
         updateUI();
-        
-        // Check if first player should be AI (it shouldn't be, but let's log it)
-        let firstPlayer = gameState.setupOrder[gameState.setupIndex];
-        debugLog(`First player to place: ${firstPlayer}, isAI: ${players[firstPlayer].isAI}`);
-        
-        if (players[firstPlayer].isAI) {
-            debugLog('First player is AI, triggering makeAISetupMove');
-            setTimeout(makeAISetupMove, 500);
-        } else {
-            debugLog('First player is human, waiting for input');
-        }
     }
     
     // Event listeners
-    document.getElementById('resetBtn').addEventListener('click', () => {
-        debugLog('Reset button clicked');
-        resetGame(gameState.gameMode);
-    });
-    document.getElementById('pvpBtn').addEventListener('click', () => {
-        debugLog('PVP button clicked');
-        resetGame('pvp');
-    });
-    document.getElementById('aiEasyBtn').addEventListener('click', () => {
-        debugLog('AI Easy button clicked');
-        resetGame('ai-easy');
-    });
-    document.getElementById('aiMediumBtn').addEventListener('click', () => {
-        debugLog('AI Medium button clicked');
-        resetGame('ai-medium');
-    });
-    document.getElementById('aiHardBtn').addEventListener('click', () => {
-        debugLog('AI Hard button clicked');
-        resetGame('ai-hard');
-    });
-    document.getElementById('forceResetBtn').addEventListener('click', () => {
-        debugLog('Force reset button clicked');
-        // Force reset to clear any stuck states
-        gameState.aiThinking = false;
-        gameState.placingWall = false;
-        gameState.selectedPiece = null;
-        gameState.validMoves = [];
-        gameState.validWallPlacements = [];
-        debugLog('Force reset - cleared all stuck states');
-        resetGame('pvp');
-    });
+    document.getElementById('resetBtn').addEventListener('click', () => resetGame(gameState.gameMode));
+    document.getElementById('pvpBtn').addEventListener('click', () => resetGame('pvp'));
+    document.getElementById('aiEasyBtn').addEventListener('click', () => resetGame('ai-easy'));
+    document.getElementById('aiMediumBtn').addEventListener('click', () => resetGame('ai-medium'));
+    document.getElementById('aiHardBtn').addEventListener('click', () => resetGame('ai-hard'));
     
-    // Clear log button
-    document.getElementById('clearLogBtn').addEventListener('click', () => {
-        document.getElementById('debugLog').textContent = '';
-        debugLog('Debug log cleared');
-    });
-    
-    // Window resize handler
     function windowResized() {
         let canvasSize = Math.min(600, window.innerWidth - 40, window.innerHeight - 300);
         resizeCanvas(canvasSize, canvasSize);
