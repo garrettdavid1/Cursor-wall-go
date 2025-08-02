@@ -1,17 +1,4 @@
-.header h1 {
-font-size: 2rem;
-color: #ff6b6b;
-text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-margin-bottom: 5px;
-}
-
-```
-    .header .subtitle {
-        font-size: 1rem;
-        color: #ffd93d;
-        opacity: 0.8;
-    }<!DOCTYPE html>
-```
+<!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -33,7 +20,6 @@ margin-bottom: 5px;
         color: white;
         min-height: 100vh;
         padding: 10px;
-        overflow-y: auto;
     }
     
     .game-container {
@@ -42,7 +28,7 @@ margin-bottom: 5px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 20px;
+        gap: 15px;
     }
     
     .header {
@@ -50,25 +36,39 @@ margin-bottom: 5px;
         margin-bottom: 10px;
     }
     
+    .header h1 {
+        font-size: 2rem;
+        color: #ff6b6b;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        margin-bottom: 5px;
+    }
+    
+    .header .subtitle {
+        font-size: 1rem;
+        color: #ffd93d;
+        opacity: 0.8;
+    }
+    
     .game-info {
         display: flex;
         flex-wrap: wrap;
-        gap: 20px;
+        gap: 15px;
         justify-content: center;
         align-items: center;
         background: rgba(255,255,255,0.1);
-        padding: 15px;
+        padding: 10px;
         border-radius: 10px;
         backdrop-filter: blur(10px);
     }
     
     .player-info {
         text-align: center;
-        padding: 10px 20px;
+        padding: 8px 15px;
         border-radius: 8px;
         background: rgba(255,255,255,0.05);
         border: 2px solid transparent;
         transition: all 0.3s ease;
+        min-width: 150px;
     }
     
     .player-info.active {
@@ -77,32 +77,50 @@ margin-bottom: 5px;
     }
     
     .player-info h3 {
-        margin-bottom: 5px;
-        font-size: 1.1rem;
+        margin-bottom: 3px;
+        font-size: 1rem;
     }
     
-    .player-info .pieces-count {
-        font-size: 0.9rem;
+    .player-info .pieces-count, .player-info .walls-count {
+        font-size: 0.85rem;
         opacity: 0.8;
     }
     
-    .player-info .walls-count {
-        font-size: 0.9rem;
+    .status {
+        background: rgba(255,255,255,0.1);
+        padding: 10px;
+        border-radius: 10px;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        max-width: 500px;
+        width: 100%;
+    }
+    
+    .phase-info {
+        font-size: 1rem;
+        margin-bottom: 8px;
+        color: #ffd93d;
+    }
+    
+    .instructions {
+        font-size: 0.85rem;
         opacity: 0.8;
+        line-height: 1.3;
     }
     
     .controls {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
+        gap: 8px;
         justify-content: center;
+        margin-top: 10px;
     }
     
     .btn {
-        padding: 10px 20px;
+        padding: 8px 16px;
         border: none;
         border-radius: 5px;
-        font-size: 1rem;
+        font-size: 0.9rem;
         cursor: pointer;
         transition: all 0.3s ease;
         font-weight: bold;
@@ -115,7 +133,7 @@ margin-bottom: 5px;
     
     .btn-primary:hover {
         background: #ff5252;
-        transform: translateY(-2px);
+        transform: translateY(-1px);
     }
     
     .btn-secondary {
@@ -125,39 +143,40 @@ margin-bottom: 5px;
     
     .btn-secondary:hover {
         background: #26a69a;
-        transform: translateY(-2px);
+        transform: translateY(-1px);
     }
     
-    .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-    }
-    
-    .status {
-        background: rgba(255,255,255,0.1);
+    .game-over {
+        background: rgba(255,107,107,0.2);
+        border: 2px solid #ff6b6b;
         padding: 15px;
         border-radius: 10px;
         text-align: center;
-        backdrop-filter: blur(10px);
-        max-width: 600px;
     }
     
-    .phase-info {
+    .game-over h2 {
+        color: #ffd93d;
+        margin-bottom: 10px;
+        font-size: 1.5rem;
+    }
+    
+    .winner {
         font-size: 1.1rem;
         margin-bottom: 10px;
-        color: #ffd93d;
     }
     
-    .instructions {
+    .final-scores {
+        margin: 10px 0;
+    }
+    
+    .score-item {
+        margin: 3px 0;
         font-size: 0.9rem;
-        opacity: 0.8;
-        line-height: 1.4;
     }
     
     @media (max-width: 768px) {
         .header h1 {
-            font-size: 1.8rem;
+            font-size: 1.7rem;
         }
         
         .header .subtitle {
@@ -166,52 +185,18 @@ margin-bottom: 5px;
         
         .game-info {
             flex-direction: column;
-            gap: 10px;
-            padding: 10px;
-        }
-        
-        .player-info {
-            min-width: 180px;
-            padding: 8px 15px;
+            gap: 8px;
+            padding: 8px;
         }
         
         .controls {
-            gap: 8px;
+            gap: 6px;
         }
         
         .btn {
-            padding: 8px 16px;
-            font-size: 0.9rem;
+            padding: 7px 14px;
+            font-size: 0.8rem;
         }
-    }
-    
-    .game-over {
-        background: rgba(255,107,107,0.2);
-        border: 2px solid #ff6b6b;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        max-width: 500px;
-    }
-    
-    .game-over h2 {
-        color: #ffd93d;
-        margin-bottom: 15px;
-        font-size: 1.8rem;
-    }
-    
-    .winner {
-        font-size: 1.2rem;
-        margin-bottom: 15px;
-    }
-    
-    .final-scores {
-        margin: 15px 0;
-    }
-    
-    .score-item {
-        margin: 5px 0;
-        font-size: 1rem;
     }
 </style>
 ```
@@ -292,7 +277,7 @@ margin-bottom: 5px;
     let boardOffsetX, boardOffsetY;
     
     function setup() {
-        let canvasSize = Math.min(600, window.innerWidth - 40, window.innerHeight - 300);
+        let canvasSize = Math.min(500, window.innerWidth - 40, window.innerHeight - 400);
         canvas = createCanvas(canvasSize, canvasSize);
         canvas.parent('gameCanvas');
         
@@ -948,7 +933,7 @@ margin-bottom: 5px;
     document.getElementById('aiHardBtn').addEventListener('click', () => resetGame('ai-hard'));
     
     function windowResized() {
-        let canvasSize = Math.min(600, window.innerWidth - 40, window.innerHeight - 300);
+        let canvasSize = Math.min(500, window.innerWidth - 40, window.innerHeight - 400);
         resizeCanvas(canvasSize, canvasSize);
         cellSize = canvasSize / (BOARD_SIZE + 1);
         boardOffsetX = cellSize / 2;
