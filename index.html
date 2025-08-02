@@ -505,6 +505,7 @@
         <div id="instructions" class="instructions">
             Player 1: Click on any empty square to place your first piece
         </div>
+        <div id="debugInfo" style="font-size: 0.7rem; margin-top: 10px; opacity: 0.6; font-family: monospace;"></div>
     </div>
     
     <div class="controls">
@@ -529,7 +530,6 @@
         validMoves: [],
         placingWall: false,
         validWallPlacements: [],
-        lastMovedPiecePos: null, // Track where the piece moved to for wall placement
         gameHistory: [],
         gameMode: 'pvp', // 'pvp', 'ai-easy', 'ai-medium', 'ai-hard'
         aiThinking: false
@@ -808,7 +808,6 @@
             placeWall(bestWall);
             gameState.placingWall = false;
             gameState.validWallPlacements = [];
-            gameState.lastMovedPiecePos = null; // Reset the tracking
             
             // Switch to next player
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
@@ -1161,17 +1160,11 @@
         let phaseInfo = document.getElementById('phaseInfo');
         let instructions = document.getElementById('instructions');
         
-        if (gameState.aiThinking) {
-            phaseInfo.textContent = `${players[gameState.currentPlayer].name} is thinking...`;
-            instructions.textContent = 'AI is calculating the best move';
-            return;
-        }
-        
         if (gameState.phase === 'setup') {
             let currentPlayerNum = gameState.setupOrder[gameState.setupIndex];
             phaseInfo.textContent = 'Setup Phase - Place your pieces';
             if (players[currentPlayerNum].isAI) {
-                instructions.textContent = `${players[currentPlayerNum].name} is placing a piece...`;
+                instructions.textContent = `${players[currentPlayerNum].name} is placing...`;
             } else {
                 instructions.textContent = `${players[currentPlayerNum].name}: Click on any empty square to place your piece`;
             }
@@ -1185,7 +1178,7 @@
             } else {
                 phaseInfo.textContent = `${players[gameState.currentPlayer].name}'s Turn - Select Piece`;
                 if (players[gameState.currentPlayer].isAI) {
-                    instructions.textContent = 'AI is planning its move...';
+                    instructions.textContent = 'AI is planning...';
                 } else {
                     instructions.textContent = 'Click on one of your pieces to select it';
                 }
@@ -1238,7 +1231,6 @@
             validMoves: [],
             placingWall: false,
             validWallPlacements: [],
-            lastMovedPiecePos: null,
             gameHistory: [],
             gameMode: mode,
             aiThinking: false
@@ -1247,7 +1239,7 @@
         updateUI();
         
         // If first player is AI (shouldn't happen in current setup, but just in case)
-        if (players[gameState.setupOrder[gameState.setupIndex]].isAI) {
+        if (players[1].isAI) {
             setTimeout(makeAISetupMove, 500);
         }
     }
