@@ -526,6 +526,17 @@
 </div>
 
 <script>
+    // Check if P5.js loaded
+    if (typeof createCanvas === 'undefined') {
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('debugLog').textContent = 'ERROR: P5.js failed to load! Canvas cannot be created.';
+        });
+    } else {
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('debugLog').textContent = 'P5.js loaded successfully, waiting for setup()...';
+        });
+    }
+    
     // Game state
     let gameState = {
         phase: 'setup', // 'setup', 'playing', 'gameOver'
@@ -537,6 +548,7 @@
         validMoves: [],
         placingWall: false,
         validWallPlacements: [],
+        lastMovedPiecePos: null, // Track where the piece moved to for wall placement
         gameHistory: [],
         gameMode: 'pvp', // 'pvp', 'ai-easy', 'ai-medium', 'ai-hard'
         aiThinking: false
@@ -862,6 +874,7 @@
             placeWall(bestWall);
             gameState.placingWall = false;
             gameState.validWallPlacements = [];
+            gameState.lastMovedPiecePos = null; // Reset the tracking
             
             // Switch to next player
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
@@ -1248,6 +1261,8 @@
     }
     
     function resetGame(mode = 'pvp') {
+        debugLog(`resetGame called with mode: ${mode}`);
+        
         // Reset board
         board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
         horizontalWalls = Array(BOARD_SIZE + 1).fill().map(() => Array(BOARD_SIZE).fill(0));
@@ -1274,8 +1289,10 @@
             } else if (mode === 'ai-hard') {
                 players[2].name = 'AI (Hard)';
             }
+            debugLog(`Set player 2 as AI: ${players[2].name}`);
         } else {
             players[2].name = 'Player 2 (Blue)';
+            debugLog('Set as PVP mode');
         }
         
         // Reset game state
@@ -1289,16 +1306,26 @@
             validMoves: [],
             placingWall: false,
             validWallPlacements: [],
+            lastMovedPiecePos: null,
             gameHistory: [],
             gameMode: mode,
             aiThinking: false
         };
         
+        debugLog(`Game reset complete. Setup order: [${gameState.setupOrder.join(', ')}]`);
+        debugLog(`Current player: ${gameState.currentPlayer}, Setup index: ${gameState.setupIndex}`);
+        
         updateUI();
         
-        // If first player is AI (shouldn't happen in current setup, but just in case)
-        if (players[1].isAI) {
+        // Check if first player should be AI (it shouldn't be, but let's log it)
+        let firstPlayer = gameState.setupOrder[gameState.setupIndex];
+        debugLog(`First player to place: ${firstPlayer}, isAI: ${players[firstPlayer].isAI}`);
+        
+        if (players[firstPlayer].isAI) {
+            debugLog('First player is AI, triggering makeAISetupMove');
             setTimeout(makeAISetupMove, 500);
+        } else {
+            debugLog('First player is human, waiting for input');
         }
     }
     
