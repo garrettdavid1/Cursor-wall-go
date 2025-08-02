@@ -528,7 +528,6 @@
         validMoves: [],
         placingWall: false,
         validWallPlacements: [],
-        lastMovedPiecePos: null, // Track where the piece moved to for wall placement
         gameHistory: [],
         gameMode: 'pvp', // 'pvp', 'ai-easy', 'ai-medium', 'ai-hard'
         aiThinking: false
@@ -807,7 +806,6 @@
             placeWall(bestWall);
             gameState.placingWall = false;
             gameState.validWallPlacements = [];
-            gameState.lastMovedPiecePos = null; // Reset the tracking
             
             // Switch to next player
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
@@ -997,7 +995,7 @@
         for (let row = 0; row < BOARD_SIZE; row++) {
             for (let col = 0; col < BOARD_SIZE; col++) {
                 if (!visited[row][col]) {
-                    let territory = floodFill(row, col, visited);
+                    let territory = floodFillTerritory(row, col, visited);
                     if (territory.cells.length > 0) {
                         territories.push(territory);
                     }
@@ -1008,10 +1006,10 @@
         return territories;
     }
     
-    function floodFill(startRow, startCol, visited) {
+    function floodFillTerritory(startRow, startCol, visited) {
         let cells = [];
         let stack = [{row: startRow, col: startCol}];
-        let players = new Set();
+        let playersInTerritory = new Set();
         
         while (stack.length > 0) {
             let {row, col} = stack.pop();
@@ -1023,24 +1021,39 @@
             visited[row][col] = true;
             cells.push({row, col});
             
+            // Track which players have pieces in this territory
             if (board[row][col] > 0) {
-                players.add(board[row][col]);
+                playersInTerritory.add(board[row][col]);
             }
             
-            // Check all 4 directions
-            let directions = [[-1,0], [1,0], [0,-1], [0,1]];
-            for (let [dr, dc] of directions) {
+            // Check all 4 directions, but only move if no wall blocks the path
+            let directions = [
+                {dr: -1, dc: 0, wallType: 'horizontal', wallRow: row, wallCol: col}, // up
+                {dr: 1, dc: 0, wallType: 'horizontal', wallRow: row + 1, wallCol: col}, // down
+                {dr: 0, dc: -1, wallType: 'vertical', wallRow: row, wallCol: col}, // left
+                {dr: 0, dc: 1, wallType: 'vertical', wallRow: row, wallCol: col + 1} // right
+            ];
+            
+            for (let {dr, dc, wallType, wallRow, wallCol} of directions) {
                 let newRow = row + dr;
                 let newCol = col + dc;
                 
-                if (canMoveTo(row, col, newRow, newCol)) {
+                // Check if there's a wall blocking this direction
+                let wallBlocked = false;
+                if (wallType === 'horizontal' && wallRow >= 0 && wallRow <= BOARD_SIZE && wallCol >= 0 && wallCol < BOARD_SIZE) {
+                    wallBlocked = horizontalWalls[wallRow][wallCol] > 0;
+                } else if (wallType === 'vertical' && wallRow >= 0 && wallRow < BOARD_SIZE && wallCol >= 0 && wallCol <= BOARD_SIZE) {
+                    wallBlocked = verticalWalls[wallRow][wallCol] > 0;
+                }
+                
+                if (!wallBlocked && newRow >= 0 && newRow < BOARD_SIZE && newCol >= 0 && newCol < BOARD_SIZE && !visited[newRow][newCol]) {
                     stack.push({row: newRow, col: newCol});
                 }
             }
         }
         
-        // Territory belongs to a player only if it contains pieces from exactly one player
-        let owner = players.size === 1 ? Array.from(players)[0] : 0;
+        // A territory belongs to a player only if it contains pieces from exactly one player
+        let owner = playersInTerritory.size === 1 ? Array.from(playersInTerritory)[0] : 0;
         
         return {
             cells: cells,
@@ -1067,7 +1080,20 @@
     }
     
     function showGameOver(winner, scores) {
+        let territories = calculateTerritories();
+        console.log('Territories found:', territories); // Debug info
+        
         let statusDiv = document.querySelector('.status');
+        
+        // Create detailed territory breakdown for debugging
+        let territoryDetails = '';
+        territories.forEach((territory, index) => {
+            console.log(`Territory ${index + 1}: Player ${territory.player}, Size ${territory.size}, Cells:`, territory.cells);
+            if (territory.player > 0) {
+                territoryDetails += `<div style="font-size: 0.8rem; margin: 2px 0;">Territory ${index + 1}: Player ${territory.player} - ${territory.size} squares</div>`;
+            }
+        });
+        
         statusDiv.innerHTML = `
             <div class="game-over">
                 <h2>Game Over!</h2>
@@ -1078,6 +1104,10 @@
                 <div class="final-scores">
                     <div class="score-item">Player 1 (Red): ${scores[1]} territory</div>
                     <div class="score-item">Player 2 (Blue): ${scores[2]} territory</div>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.9rem; opacity: 0.8;">
+                    <strong>Territory Breakdown:</strong>
+                    ${territoryDetails || '<div>No controlled territories found</div>'}
                 </div>
             </div>
         `;
@@ -1091,7 +1121,31 @@
             let wallsDiv = infoDiv.querySelector('.walls-count');
             
             piecesDiv.textContent = `Pieces: ${players[player].pieces.length}`;
-            wallsDiv.textContent = `Walls: ${players[player].wallsLeft}`;
+            
+            // Calculate walls remaining
+            let wallsUsed = 0;
+            // Count horizontal walls
+            for (let row = 0; row <= BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (horizontalWalls[row][col] == player) {
+                        wallsUsed++;
+                    }
+                }
+            }
+            // Count vertical walls
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col <= BOARD_SIZE; col++) {
+                    if (verticalWalls[row][col] == player) {
+                        wallsUsed++;
+                    }
+                }
+            }
+            
+            let wallsRemaining = 20 - wallsUsed;
+            wallsDiv.textContent = `Walls: ${wallsRemaining}`;
+            
+            // Update the player object to keep it in sync
+            players[player].wallsLeft = wallsRemaining;
             
             if (gameState.currentPlayer == player && gameState.phase !== 'gameOver') {
                 infoDiv.classList.add('active');
@@ -1181,7 +1235,6 @@
             validMoves: [],
             placingWall: false,
             validWallPlacements: [],
-            lastMovedPiecePos: null,
             gameHistory: [],
             gameMode: mode,
             aiThinking: false
