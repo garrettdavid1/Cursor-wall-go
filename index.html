@@ -529,6 +529,7 @@
         validMoves: [],
         placingWall: false,
         validWallPlacements: [],
+        lastMovedPiecePos: null, // Track where the piece moved to for wall placement
         gameHistory: [],
         gameMode: 'pvp', // 'pvp', 'ai-easy', 'ai-medium', 'ai-hard'
         aiThinking: false
@@ -807,6 +808,7 @@
             placeWall(bestWall);
             gameState.placingWall = false;
             gameState.validWallPlacements = [];
+            gameState.lastMovedPiecePos = null; // Reset the tracking
             
             // Switch to next player
             gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
@@ -1236,6 +1238,7 @@
             validMoves: [],
             placingWall: false,
             validWallPlacements: [],
+            lastMovedPiecePos: null,
             gameHistory: [],
             gameMode: mode,
             aiThinking: false
@@ -1244,7 +1247,7 @@
         updateUI();
         
         // If first player is AI (shouldn't happen in current setup, but just in case)
-        if (players[1].isAI) {
+        if (players[gameState.setupOrder[gameState.setupIndex]].isAI) {
             setTimeout(makeAISetupMove, 500);
         }
     }
